@@ -34,8 +34,9 @@ cd ~/Dev && gh repo clone <owner/repo> <폴더이름>
 - 의존성 설치(`pnpm install` 등). 경고·오류는 원문을 보고 판단한다. 패키지가 설치됐는지는 테스트로 확인한다.
 
 ### 4. env 파일
-- 저장소 `.gitignore` 에 걸린 env 파일(`.env.local` 등)은 GitHub에 없다. 내용을 읽지 않는다.
-- Vercel 프로젝트가 연결된 앱이면 사용자에게 "`vercel env pull` 로 받을까요? (Vercel 개발 환경 값이 들어갑니다)" 하고 묻고, 승인 뒤 실행한다. 아니면 사용자가 금고에서 직접 넣도록 파일 경로만 알려 준다.
+- env 원본은 **Vercel** 이다. 저장소 `.gitignore` 에 걸린 env 파일(`.env.local` 등)은 GitHub에 없다. 내용을 읽지 않는다.
+- Vercel 프로젝트가 연결된 앱이면 `vercel link`(팀·프로젝트 이름은 사용자에게 확인) 뒤 `vercel env pull .env.local --environment=development`. 받은 파일의 변수 개수만 보고한다.
+- 받은 값만으로 실패하는 기능이 있으면 오류 원문을 보고한다(Vercel에 빠진 변수를 사용자가 추가하는 근거). iCloud 옛 폴더에서 복사해 메우지 않는다.
 
 ### 5. 확인
 - 프로젝트 테스트를 실행한다(`pnpm test` 등). 결과 숫자를 보고한다.
