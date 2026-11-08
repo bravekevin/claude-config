@@ -1,0 +1,226 @@
+#!/usr/bin/env bash
+# git 저장소가 컴퓨터 분실·고장에 안전한지 점검하고, GitHub에 없는 작업을 백업 브랜치로 올리는 도구
+#
+# 사용법
+#   git-safety audit [저장소 경로...]      읽기 전용 점검 (경로 없으면 현재 폴더)
+#   git-safety backup [옵션] [저장소 경로]  백업 계획 출력 (--yes 를 줘야 실제 push)
+#
+# backup 옵션
+#   --yes              실제로 push 한다 (없으면 계획만 보여 줌)
+#   --own <접두사>     내 브랜치 접두사(여러 번 가능, 기본 claude/). upstream 없는 내 브랜치는 같은 이름으로 push -u
+#   --remote <이름>    push 할 원격 (기본 origin)
+#   --no-wip           커밋 안 된 변경 스냅샷을 만들지 않음
+#
+# 규칙
+#   - upstream 이 있고 fast-forward 가능한 브랜치 → upstream 으로 push
+#   - 내 접두사 브랜치인데 upstream 없음 → 같은 이름으로 push -u
+#   - 그 밖(다른 사람·도구의 브랜치, 갈라진 브랜치) → backup/<브랜치> 로 push (원래 이름은 건드리지 않음)
+#   - stash → backup/stash/<번호>-<SHA> 로 push
+#   - 커밋 안 된 변경 → 작업 폴더·index 를 건드리지 않고 스냅샷 커밋을 만들어 backup/wip/<날짜-시각>/<폴더이름> 으로 push
+#     (node_modules, .next*, dist, build 폴더와 95MB 넘는 파일은 제외)
+#   - main/master 자체에는 push 하지 않는다(로컬 커밋은 backup/main 으로). force push 하지 않는다.
+
+set -u
+DATE=$(date +%Y-%m-%d)
+STAMP=$(date +%Y-%m-%d-%H%M)
+MAX_BYTES=$((95 * 1024 * 1024))
+
+red()  { printf '\033[31m%s\033[0m\n' "$*"; }
+yel()  { printf '\033[33m%s\033[0m\n' "$*"; }
+grn()  { printf '\033[32m%s\033[0m\n' "$*"; }
+
+is_icloud_path() {
+  local p; p=$(cd "$1" && pwd -P)
+  case "$p" in
+    "$HOME/Library/Mobile Documents"*) return 0 ;;
+    "$HOME/Desktop"*)   [ "$(defaults read com.apple.finder FXICloudDriveDesktop 2>/dev/null)" = "1" ] && return 0 ;;
+    "$HOME/Documents"*) [ "$(defaults read com.apple.finder FXICloudDriveDesktop 2>/dev/null)" = "1" ] && return 0 ;;
+  esac
+  return 1
+}
+
+# 원격 어디에도 없는 커밋 수
+unpushed_count() { git -C "$1" rev-list --count "$2" --not --remotes 2>/dev/null || echo 0; }
+
+# 커밋 안 된 변경 수 (무시 파일·빌드 폴더 제외)
+dirty_count() {
+  git -C "$1" status --porcelain --untracked-files=all 2>/dev/null \
+    | grep -v -E '(^|/)(node_modules|\.next[^/]*|dist|build)/' | grep -v -E '^\?\? \.claude/' | wc -l | tr -d ' '
+}
+
+audit_one() {
+  local repo="$1" top common issues=0
+  top=$(git -C "$repo" rev-parse --show-toplevel 2>/dev/null) || { red "git 저장소 아님: $repo"; return 1; }
+  common=$(cd "$top" && cd "$(git rev-parse --git-common-dir)" && pwd -P)
+  echo "== $top"
+  local origin; origin=$(git -C "$top" remote get-url origin 2>/dev/null)
+  if [ -z "$origin" ]; then red "  [위험] 원격(origin) 없음 — 이 컴퓨터에만 있는 저장소"; issues=$((issues+1)); fi
+  if is_icloud_path "$top"; then yel "  [주의] iCloud 동기화 폴더 안에 있음 — ~/Dev 같은 곳으로 옮기는 것을 권장"; issues=$((issues+1)); fi
+  local conflicts; conflicts=$(find "$common" -maxdepth 3 \( -name '* [0-9]' -o -name '* [0-9].*' \) 2>/dev/null | wc -l | tr -d ' ')
+  if [ "$conflicts" != "0" ]; then red "  [위험] .git 안 iCloud 충돌 사본 $conflicts 개"; issues=$((issues+1)); fi
+
+  # 브랜치
+  local b u n
+  while IFS='|' read -r b u; do
+    n=$(unpushed_count "$top" "refs/heads/$b")
+    [ "$n" = "0" ] && continue
+    if [ -z "$u" ]; then red "  [위험] $b — upstream 없음, 원격에 없는 커밋 $n"; else red "  [위험] $b → $u — 원격에 없는 커밋 $n"; fi
+    issues=$((issues+1))
+  done < <(git -C "$top" for-each-ref refs/heads --format='%(refname:short)|%(upstream:short)')
+
+  # worktree
+  local wt d
+  while read -r wt; do
+    [ -d "$wt" ] || { yel "  [주의] worktree 경로 없음: $wt"; continue; }
+    d=$(dirty_count "$wt")
+    if [ "$d" != "0" ]; then
+      local last; last=$(latest_wip_ref "$wt")
+      if [ -n "$last" ] && [ "$(snapshot_tree "$wt" 2>/dev/null)" = "$(git -C "$wt" rev-parse "$last^{tree}")" ]; then
+        yel "  [주의] 커밋 안 된 변경 $d 개 — 원격 스냅샷 ${last#refs/remotes/} 와 같음(백업됨): $wt"
+      else
+        red "  [위험] 커밋 안 된 변경 $d 개${last:+ (마지막 스냅샷 이후 바뀜)}: $wt"
+      fi
+      issues=$((issues+1))
+    fi
+    case "$wt" in /tmp/*|/private/tmp/*|/var/folders/*) yel "  [주의] 임시 폴더 worktree(재부팅 시 사라짐): $wt"; issues=$((issues+1));; esac
+  done < <(git -C "$top" worktree list --porcelain | sed -n 's/^worktree //p')
+
+  local s; s=$(git -C "$top" stash list | wc -l | tr -d ' ')
+  if [ "$s" != "0" ]; then
+    local up=0 sh; while read -r sh; do [ "$(git -C "$top" rev-list --count "$sh" --not --remotes)" != "0" ] && up=$((up+1)); done < <(git -C "$top" stash list --format=%H)
+    if [ "$up" != "0" ]; then red "  [위험] stash $s 개 중 $up 개가 원격에 없음"; issues=$((issues+1)); else yel "  [주의] stash $s 개(모두 원격 백업됨)"; fi
+  fi
+
+  [ "$issues" = "0" ] && grn "  안전: 모든 작업이 원격에 있음"
+  return 0
+}
+
+# 작업 폴더·index 를 건드리지 않고 "지금 상태" 트리를 만든다. 트리 SHA 출력
+snapshot_tree() {
+  local wt="$1" idx tmp tree f sz
+  idx=$(git -C "$wt" rev-parse --path-format=absolute --git-path index)
+  tmp=$(mktemp -t git-safety-index)
+  [ -f "$idx" ] && cp "$idx" "$tmp"
+  GIT_INDEX_FILE="$tmp" git -C "$wt" add -A -- . \
+    ':(exclude,glob)**/node_modules/**' ':(exclude,glob)**/.next*/**' \
+    ':(exclude,glob)**/dist/**' ':(exclude,glob)**/build/**' ':(exclude).claude/worktrees' 2>/dev/null
+  # 큰 파일 제외
+  while IFS= read -r f; do
+    [ -f "$wt/$f" ] || continue
+    sz=$(stat -f %z "$wt/$f" 2>/dev/null || stat -c %s "$wt/$f")
+    if [ "$sz" -gt "$MAX_BYTES" ]; then
+      yel "    95MB 초과 제외: $f" >&2
+      GIT_INDEX_FILE="$tmp" git -C "$wt" rm --cached -q -- "$f"
+    fi
+  done < <(GIT_INDEX_FILE="$tmp" git -C "$wt" diff --cached --name-only HEAD)
+  tree=$(GIT_INDEX_FILE="$tmp" git -C "$wt" write-tree)
+  rm -f "$tmp"
+  echo "$tree"
+}
+
+# 이 worktree 의 가장 최근 원격 스냅샷 ref (없으면 빈 값)
+latest_wip_ref() {
+  local wt="$1" remote="${2:-origin}"
+  git -C "$wt" for-each-ref --format='%(refname)' "refs/remotes/$remote/backup/wip/" \
+    | grep "/$(basename "$wt")\$" | sort | tail -1
+}
+
+# 스냅샷 커밋 생성. 변경이 없거나 최근 스냅샷과 같으면 빈 값
+snapshot_commit() {
+  local wt="$1" tree head last
+  tree=$(snapshot_tree "$wt")
+  head=$(git -C "$wt" rev-parse HEAD)
+  [ "$tree" = "$(git -C "$wt" rev-parse "HEAD^{tree}")" ] && { echo ""; return 0; }
+  last=$(latest_wip_ref "$wt")
+  [ -n "$last" ] && [ "$tree" = "$(git -C "$wt" rev-parse "$last^{tree}")" ] && { echo ""; return 0; }
+  git -C "$wt" commit-tree "$tree" -p "$head" \
+    -m "백업 스냅샷: $(basename "$wt") 커밋 안 된 변경 ($DATE, git-safety)" \
+    -m "원래 브랜치: $(git -C "$wt" branch --show-current) / 원래 경로: $wt"
+}
+
+backup_one() {
+  local repo="." yes=0 remote=origin wip=1 own=""
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --yes) yes=1 ;;
+      --own) own="$own $2"; shift ;;
+      --remote) remote="$2"; shift ;;
+      --no-wip) wip=0 ;;
+      *) repo="$1" ;;
+    esac
+    shift
+  done
+  [ -z "$own" ] && own=" claude/"
+  local top; top=$(git -C "$repo" rev-parse --show-toplevel) || return 1
+  git -C "$top" remote get-url "$remote" >/dev/null 2>&1 || { red "원격 $remote 없음. 먼저 GitHub 저장소를 만들고 연결하세요."; return 1; }
+  echo "== 백업 계획: $top (원격 $remote)"
+  git -C "$top" fetch "$remote" --prune -q
+
+  local plan=() b u n target mine p
+  while IFS='|' read -r b u; do
+    n=$(unpushed_count "$top" "refs/heads/$b")
+    [ "$n" = "0" ] && continue
+    case "$b" in main|master) plan+=("refs/heads/$b:refs/heads/backup/$b|$b → backup/$b ($n 커밋, main/master 자체에는 push 안 함)|"); continue;; esac
+    mine=0; for p in $own; do case "$b" in "$p"*) mine=1;; esac; done
+    if [ -n "$u" ] && [ "${u%%/*}" = "$remote" ] && case "${u#*/}" in main|master) false;; *) true;; esac && git -C "$top" merge-base --is-ancestor "$u" "refs/heads/$b" 2>/dev/null; then
+      target="${u#*/}"; plan+=("refs/heads/$b:refs/heads/$target|$b → $target (fast-forward, $n 커밋)|")
+    elif [ -z "$u" ] && [ "$mine" = "1" ] && ! git -C "$top" rev-parse -q --verify "refs/remotes/$remote/$b" >/dev/null; then
+      plan+=("refs/heads/$b:refs/heads/$b|$b → $b (새 원격 브랜치, $n 커밋)|$b")
+    else
+      plan+=("refs/heads/$b:refs/heads/backup/$b|$b → backup/$b ($n 커밋, 원래 이름은 그대로 둠)|")
+    fi
+  done < <(git -C "$top" for-each-ref refs/heads --format='%(refname:short)|%(upstream:short)')
+
+  local wt d c name
+  if [ "$wip" = "1" ]; then
+    while read -r wt; do
+      [ -d "$wt" ] || continue
+      d=$(dirty_count "$wt"); [ "$d" = "0" ] && continue
+      name=$(basename "$wt")
+      if [ "$yes" = "1" ]; then
+        c=$(snapshot_commit "$wt")
+        [ -z "$c" ] && continue
+        plan+=("$c:refs/heads/backup/wip/$STAMP/$name|$name 커밋 안 된 변경 $d 개 → backup/wip/$STAMP/$name|")
+      else
+        local last; last=$(latest_wip_ref "$wt" "$remote")
+        [ -n "$last" ] && [ "$(snapshot_tree "$wt" 2>/dev/null)" = "$(git -C "$wt" rev-parse "$last^{tree}")" ] && continue
+        plan+=("(스냅샷):refs/heads/backup/wip/$STAMP/$name|$name 커밋 안 된 변경 $d 개 → backup/wip/$STAMP/$name|")
+      fi
+    done < <(git -C "$top" worktree list --porcelain | sed -n 's/^worktree //p')
+  fi
+
+  # stash: 원격에 없는 항목만 backup/stash/<번호>-<SHA앞8자리> 로
+  local sha i=0
+  while read -r sha; do
+    [ -z "$sha" ] && continue
+    if [ "$(git -C "$top" rev-list --count "$sha" --not --remotes)" != "0" ]; then
+      plan+=("$sha:refs/heads/backup/stash/$i-${sha:0:8}|stash@{$i} → backup/stash/$i-${sha:0:8}|")
+    fi
+    i=$((i+1))
+  done < <(git -C "$top" stash list --format=%H)
+
+  if [ ${#plan[@]} -eq 0 ]; then grn "  올릴 것 없음: 이미 안전"; return 0; fi
+  local item spec desc track
+  for item in "${plan[@]}"; do desc=$(echo "$item" | cut -d'|' -f2); echo "  - $desc"; done
+  if [ "$yes" != "1" ]; then yel "  계획만 표시했습니다. 실행하려면 --yes 를 붙이세요."; return 0; fi
+
+  local fail=0
+  for item in "${plan[@]}"; do
+    spec=$(echo "$item" | cut -d'|' -f1); desc=$(echo "$item" | cut -d'|' -f2); track=$(echo "$item" | cut -d'|' -f3)
+    if git -C "$top" push -q "$remote" "$spec" 2>/tmp/git-safety-push.$$; then
+      grn "  완료: $desc"
+      [ -n "$track" ] && git -C "$top" branch -q --set-upstream-to="$remote/$track" "$track" 2>/dev/null
+    else
+      red "  실패: $desc"; sed 's/^/    /' /tmp/git-safety-push.$$; fail=1
+    fi
+  done
+  rm -f /tmp/git-safety-push.$$
+  return $fail
+}
+
+cmd="${1:-}"; shift || true
+case "$cmd" in
+  audit)  if [ $# -eq 0 ]; then audit_one .; else for r in "$@"; do audit_one "$r"; done; fi ;;
+  backup) backup_one "$@" ;;
+  *) sed -n '2,24p' "$0" | sed 's/^# \{0,1\}//'; exit 1 ;;
+esac
