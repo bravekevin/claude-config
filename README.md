@@ -12,6 +12,7 @@ Mac 여러 대와 클라우드 세션이 같은 지침을 쓰기 위한 저장�
 | `dev-sync.md` | GitHub 중심 개발 환경 — 분실 대비·여러 컴퓨터 동기화 안내 |
 | `bin/git-safety` | 저장소 점검(`audit`)·GitHub 백업(`backup`) |
 | `prompts/*.md` | Claude 지시문: 새 Mac 준비·프로젝트 옮기기·옛 폴더 정리 |
+| `bin/mac-setup` | 새 Mac 한 번에 준비: Homebrew·gh·node·pnpm·vercel 설치, 로그인, dev-bootstrap, 프로젝트 clone (`curl … \| bash`) |
 | `bin/dev-bootstrap` | 새 Mac 준비: 비공개 저장소 clone·메모리 링크·hook·PATH |
 
 ## 연결

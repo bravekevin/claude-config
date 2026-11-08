@@ -56,6 +56,12 @@ force push는 하지 않는다. 다시 실행하면 이미 올라간 것은 건�
 팀·조직 저장소는 main·dev 같은 공용 브랜치에 바로 push하지 말고 팀 규칙을 따른다. `backup/*`로 올리는 것은 안전하다.
 
 ## 새 컴퓨터 (처음 한 번)
+가장 빠른 방법: Claude 앱 설치·로그인 → 터미널에 한 줄. 비밀번호 입력과 GitHub·Vercel 브라우저 로그인만 직접 한다.
+```bash
+curl -fsSL https://raw.githubusercontent.com/bravekevin/claude-config/main/bin/mac-setup | bash
+```
+프로젝트를 물으면 `계정/저장소:폴더` 로 입력한다(예: `bravekevin/zellytalk:ZellyTalk`). 아래는 같은 일을 손으로 하는 순서다.
+
 ```bash
 # 1) 도구: Homebrew, git, gh, Node, Claude 데스크톱 앱
 gh auth login
