@@ -37,6 +37,13 @@ iCloud 안 위치, `.git` 충돌 사본, 원격에 없는 커밋, 커밋 안 된
 
 force push는 하지 않는다. 다시 실행하면 이미 올라간 것은 건너뛴다.
 
+## Claude에게 시키기 (지시문)
+| 하고 싶은 것 | 세션에 붙여 넣을 말 |
+|---|---|
+| 새 Mac 준비 | `https://github.com/bravekevin/claude-config 의 prompts/new-mac-setup.md 대로 이 Mac을 준비해. 프로젝트: <owner/repo>` |
+| 프로젝트 하나 옮기기 | `~/.claude-config/prompts/migrate-project.md 대로 <옛 폴더> 를 옮겨줘.` |
+| 옛 폴더 정리 | `~/.claude-config/prompts/retire-old-folders.md 대로 <옛 폴더> 를 정리해줘.` |
+
 ## 프로젝트 하나 옮기기 (순서)
 1. `git-safety audit ~/Desktop/Dev/<프로젝트>` — 상태 확인
 2. 원격이 없으면 만든다: `gh repo create <계정>/<이름> --private --source ~/Desktop/Dev/<프로젝트> --remote origin` 후 `git push -u origin main`

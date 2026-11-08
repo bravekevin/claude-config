@@ -7,7 +7,8 @@
 #   3. 비공개 저장소 <내계정>/claude-private 를 ~/.claude-private 로 clone (있으면 pull)
 #   4. Claude 메모리 링크(~/.claude/projects/*/memory → ~/.claude-private/memory/*)
 #   5. ~/.claude/settings.json 에 동기화 hook 추가(SessionStart: pull, Stop: push). 먼저 백업 파일을 만든다
-#   6. ~/.claude-config/bin 을 PATH 에 추가(~/.zshrc)
+#   6. ~/.claude/CLAUDE.md 를 전역 지침 import 로 연결(기존 파일은 백업)
+#   7. ~/.claude-config/bin 을 PATH 에 추가(~/.zshrc)
 set -eu
 CFG="$HOME/.claude-config"
 PRIV="$HOME/.claude-private"
@@ -68,7 +69,16 @@ else:
     print("이미 설치됨")
 EOF
 
-step "6. PATH"
+step "6. 전역 지침 연결(~/.claude/CLAUDE.md)"
+MD="$HOME/.claude/CLAUDE.md"
+if grep -q '@~/.claude-config/CLAUDE.md' "$MD" 2>/dev/null; then echo "이미 연결됨"
+else
+  [ -f "$MD" ] && cp -p "$MD" "$MD.bak-$(date +%Y%m%d%H%M%S)" && echo "기존 파일 백업함"
+  printf '# 전역 지침 — 정본은 개인 저장소 claude-config(~/.claude-config). 이 파일은 직접 고치지 않는다\n@~/.claude-config/CLAUDE.md\n@~/.claude-config/mac.md\n' > "$MD"
+  echo "연결함: $MD"
+fi
+
+step "7. PATH"
 if ! grep -q '.claude-config/bin' "$HOME/.zshrc" 2>/dev/null; then
   printf '\n# 개인 개발 도구(git-safety, dev-bootstrap)\nexport PATH="$HOME/.claude-config/bin:$PATH"\n' >> "$HOME/.zshrc"
   echo "~/.zshrc 에 추가함(새 터미널부터 적용)"
