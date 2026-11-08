@@ -1,5 +1,14 @@
 # claude-config — 개인 Claude Code 전역 지침 정본
 
+## 🆕 새 Mac 준비 (이것만 복사)
+터미널에 붙여 넣는다. Mac 비밀번호, GitHub·Vercel 브라우저 로그인만 직접 한다.
+```bash
+curl -fsSL https://raw.githubusercontent.com/bravekevin/claude-config/main/bin/mac-setup | bash
+```
+Claude 세션에 맡길 때: **"github.com/bravekevin/claude-config 보고 이 Mac 준비 안내해줘"** — Claude가 이 README 를 읽고 순서를 안내한다(비밀번호 입력은 직접).
+자세한 설명은 [`dev-sync.md`](dev-sync.md).
+
+---
 Mac 여러 대와 클라우드 세션이 같은 지침을 쓰기 위한 저장소.
 
 **공개 저장소다(2026-10-30 전환 — 클라우드 세션이 인증 없이 받게).** 비밀값·이메일·회사 내부 정보는 넣지 않는다(이름·절차만).
