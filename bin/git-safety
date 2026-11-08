@@ -42,6 +42,14 @@ is_icloud_path() {
 # 원격 어디에도 없는 커밋 수
 unpushed_count() { git -C "$1" rev-list --count "$2" --not --remotes 2>/dev/null || echo 0; }
 
+# 브랜치 끝의 파일 내용(트리)이 원격 어딘가의 커밋과 같고, 일반 커밋이 모두 원격에 같은 변경으로 있으면 참
+content_on_remote() {
+  local top="$1" ref="$2" tree
+  [ "$(git -C "$top" log --no-merges --cherry-pick --right-only --format=%h --remotes...$ref --not --remotes 2>/dev/null | wc -l | tr -d ' ')" = "0" ] || return 1
+  tree=$(git -C "$top" rev-parse "$ref^{tree}")
+  git -C "$top" log --remotes --format=%T | grep -q -x "$tree"
+}
+
 # 커밋 안 된 변경 수 (무시 파일·빌드 폴더 제외)
 dirty_count() {
   git -C "$1" status --porcelain --untracked-files=all 2>/dev/null \
@@ -64,6 +72,10 @@ audit_one() {
   while IFS='|' read -r b u; do
     n=$(unpushed_count "$top" "refs/heads/$b")
     [ "$n" = "0" ] && continue
+    if content_on_remote "$top" "refs/heads/$b"; then
+      yel "  [주의] $b — 원격에 없는 커밋 $n 개는 병합 기록뿐, 내용은 원격에 있음(백업 불필요)"
+      issues=$((issues+1)); continue
+    fi
     if [ -z "$u" ]; then red "  [위험] $b — upstream 없음, 원격에 없는 커밋 $n"; else red "  [위험] $b → $u — 원격에 없는 커밋 $n"; fi
     issues=$((issues+1))
   done < <(git -C "$top" for-each-ref refs/heads --format='%(refname:short)|%(upstream:short)')
@@ -160,6 +172,7 @@ backup_one() {
   while IFS='|' read -r b u; do
     n=$(unpushed_count "$top" "refs/heads/$b")
     [ "$n" = "0" ] && continue
+    content_on_remote "$top" "refs/heads/$b" && { yel "  건너뜀: $b — 병합 기록만 다르고 내용은 원격에 있음"; continue; }
     case "$b" in main|master) plan+=("refs/heads/$b:refs/heads/backup/$b|$b → backup/$b ($n 커밋, main/master 자체에는 push 안 함)|"); continue;; esac
     mine=0; for p in $own; do case "$b" in "$p"*) mine=1;; esac; done
     if [ -n "$u" ] && [ "${u%%/*}" = "$remote" ] && case "${u#*/}" in main|master) false;; *) true;; esac && git -C "$top" merge-base --is-ancestor "$u" "refs/heads/$b" 2>/dev/null; then
