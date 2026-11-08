@@ -175,3 +175,15 @@ This is the step LLMs skip most often after "run tests". They guess from error k
 ## 📂 프로젝트 지침 우선순위
 
 세션 시작 시 프로젝트별 `CLAUDE.md` / `Project_Guide/*.md` 를 먼저 읽고, 본 전역 지침과 충돌 시 **보안 관련은 본 지침이 우선**.
+
+---
+
+## 🔄 GitHub 중심 작업 — 분실 대비·여러 컴퓨터 (2026-11-08 사용자 결정)
+
+자세한 내용은 `~/.claude-config/dev-sync.md`.
+
+- 코드 동기화는 GitHub만. iCloud·Dropbox 폴더(`~/Desktop`, `~/Documents`)에 저장소를 새로 만들거나 clone하지 않는다. 새 프로젝트는 `~/Dev/<프로젝트>`.
+- 작업 단위가 끝나면 커밋하고 자기 브랜치를 push한다. 세션을 마치기 전에 `git-safety audit` 로 원격에 없는 작업이 없는지 본다.
+- worktree는 `/tmp`가 아닌 영구 경로에 만든다.
+- 다른 사람·도구의 브랜치나 main을 백업할 때는 `git-safety backup` 으로 `backup/*` 에만 올린다.
+- 공개 저장소(`claude-config`)에는 프로젝트 이름·사업 정보·메모리를 넣지 않는다. 그런 것은 비공개 `claude-private`.
