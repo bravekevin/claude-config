@@ -1,0 +1,85 @@
+#!/usr/bin/env bash
+# 새 Mac(또는 기존 Mac)을 "GitHub 중심·분실 대비" 개발 환경으로 맞추는 준비 스크립트. 여러 번 실행해도 안전
+#
+# 하는 일
+#   1. gh 로그인 확인
+#   2. ~/Dev 폴더 생성(iCloud 밖 작업 위치)
+#   3. 비공개 저장소 <내계정>/claude-private 를 ~/.claude-private 로 clone (있으면 pull)
+#   4. Claude 메모리 링크(~/.claude/projects/*/memory → ~/.claude-private/memory/*)
+#   5. ~/.claude/settings.json 에 동기화 hook 추가(SessionStart: pull, Stop: push). 먼저 백업 파일을 만든다
+#   6. ~/.claude-config/bin 을 PATH 에 추가(~/.zshrc)
+set -eu
+CFG="$HOME/.claude-config"
+PRIV="$HOME/.claude-private"
+SETTINGS="$HOME/.claude/settings.json"
+
+step() { printf '\n▶ %s\n' "$*"; }
+
+step "1. gh 로그인 확인"
+gh auth status >/dev/null 2>&1 || { echo "gh 로그인이 필요합니다: gh auth login"; exit 1; }
+ME=$(gh api user -q .login)
+echo "활성 계정: $ME"
+
+step "2. ~/Dev 생성"
+mkdir -p "$HOME/Dev"
+case "$(cd "$HOME/Dev" && pwd -P)" in "$HOME/Library/Mobile Documents"*) echo "경고: ~/Dev 가 iCloud 안에 있습니다";; esac
+
+step "3. 비공개 저장소"
+REPO="${CLAUDE_PRIVATE_REPO:-$ME/claude-private}"
+if [ -d "$PRIV/.git" ]; then git -C "$PRIV" pull -q --rebase --autostash && echo "갱신함: $PRIV"
+elif gh repo view "$REPO" >/dev/null 2>&1; then gh repo clone "$REPO" "$PRIV" -- -q && echo "clone: $PRIV"
+else echo "$REPO 가 없습니다. 처음 한 번은 claude-config/dev-sync.md 의 '처음 만들기' 를 따르세요."; exit 1; fi
+
+step "4. Claude 메모리 링크"
+mkdir -p "$HOME/.claude/projects"
+python3 "$PRIV/bin/link-memory"
+
+step "5. 동기화 hook"
+mkdir -p "$HOME/.claude"
+[ -f "$SETTINGS" ] || echo '{}' > "$SETTINGS"
+cp -p "$SETTINGS" "$SETTINGS.bak-$(date +%Y%m%d%H%M%S)"
+python3 - "$SETTINGS" <<'EOF'
+import json, sys
+p = sys.argv[1]
+d = json.load(open(p))
+hooks = d.setdefault("hooks", {})
+want = {
+    "SessionStart": {"type": "command",
+                     "command": "[ -x \"$HOME/.claude-private/bin/sync\" ] && bash \"$HOME/.claude-private/bin/sync\" pull || true",
+                     "timeout": 60, "statusMessage": "메모리 동기화(받기) 중"},
+    "Stop": {"type": "command",
+             "command": "[ -x \"$HOME/.claude-private/bin/sync\" ] && bash \"$HOME/.claude-private/bin/sync\" push || true",
+             "timeout": 60, "async": True},
+}
+also = {"SessionStart": {"type": "command",
+                         "command": "git -C \"$HOME/.claude-config\" pull -q --ff-only 2>/dev/null || true",
+                         "timeout": 30, "statusMessage": "개인 전역 지침 갱신 중"}}
+changed = False
+for ev, h in list(want.items()) + list(also.items()):
+    groups = hooks.setdefault(ev, [])
+    if any(x.get("command") == h["command"] for g in groups for x in g.get("hooks", [])):
+        continue
+    groups.append({"hooks": [h]})
+    changed = True
+    print(f"추가: {ev} hook")
+if changed:
+    json.dump(d, open(p, "w"), ensure_ascii=False, indent=2)
+else:
+    print("이미 설치됨")
+EOF
+
+step "6. PATH"
+if ! grep -q '.claude-config/bin' "$HOME/.zshrc" 2>/dev/null; then
+  printf '\n# 개인 개발 도구(git-safety, dev-bootstrap)\nexport PATH="$HOME/.claude-config/bin:$PATH"\n' >> "$HOME/.zshrc"
+  echo "~/.zshrc 에 추가함(새 터미널부터 적용)"
+else echo "이미 있음"; fi
+
+cat <<EOF
+
+✅ 준비 끝. 다음은 직접:
+  - 프로젝트 받기:  cd ~/Dev && gh repo clone <계정>/<저장소> <폴더이름>
+  - env 받기:       (프로젝트 폴더에서) vercel link && vercel env pull  — 또는 금고에서
+  - 키 다시 넣기:   tok set <키이름>   (값은 직접 입력)
+  - Claude 새 세션: "이 컴퓨터" → ~/Dev/<폴더이름> 선택
+  - 점검:           git-safety audit ~/Dev/<폴더이름>
+EOF

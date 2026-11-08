@@ -9,6 +9,9 @@ Mac 여러 대와 클라우드 세션이 같은 지침을 쓰기 위한 저장�
 | `CLAUDE.md` | 공통 — 한글·caveman·karpathy·커밋·테스트·프로젝트 지침 우선순위 |
 | `mac.md` | Mac 만 — Keychain(`tok`) 토큰 정책 |
 | `cloud.md` | 클라우드만 — 네트워크 시크릿 전제의 비밀값 규칙 |
+| `dev-sync.md` | GitHub 중심 개발 환경 — 분실 대비·여러 컴퓨터 동기화 안내 |
+| `bin/git-safety` | 저장소 점검(`audit`)·GitHub 백업(`backup`) |
+| `bin/dev-bootstrap` | 새 Mac 준비: 비공개 저장소 clone·메모리 링크·hook·PATH |
 
 ## 연결
 - Mac: `git clone https://github.com/bravekevin/claude-config.git ~/.claude-config` 뒤 `~/.claude/CLAUDE.md` 를 아래 두 줄로 둔다. 사용자 수준 SessionStart 훅이 `git -C ~/.claude-config pull --ff-only` 로 갱신한다.
@@ -28,12 +31,10 @@ Mac 여러 대와 클라우드 세션이 같은 지침을 쓰기 위한 저장�
    ```bash
    git clone https://github.com/bravekevin/claude-config.git ~/.claude-config
    ```
-3. **지침 자동 갱신 훅**: 세션 시작마다 이 저장소를 당겨 온다.
+3. **자동 준비(2026-11-08)**: 아래 한 줄이 지침 갱신 hook, 비공개 저장소(`<계정>/claude-private`: 메모리·`tok` 정책 사본·분실 대응표) clone, 메모리 링크, 메모리 동기화 hook, PATH 를 맞춘다. 여러 번 실행해도 안전하다.
    ```bash
-   S=~/.claude/settings.json; [ -f "$S" ] || echo '{}' > "$S"
-   C='git -C "$HOME/.claude-config" pull -q --ff-only 2>/dev/null || true'
-   jq --arg c "$C" '.hooks.SessionStart = (((.hooks.SessionStart // []) | map(select(.hooks[0].command != $c))) + [{hooks: [{type: "command", command: $c, timeout: 30, statusMessage: "개인 전역 지침 갱신 중"}]}])' "$S" > "$S.tmp" && mv "$S.tmp" "$S"
+   ~/.claude-config/bin/dev-bootstrap
    ```
-4. **`tok`**: 옛 Mac 의 `~/Desktop/Dev/bin/tok`·`TOKEN_POLICY.md`·`TOKEN_INVENTORY.md` 를 직접 전달로 옮기고 `~/Desktop/Dev/bin` 을 PATH 에 넣는다. Keychain 값은 옮겨지지 않는다 — 각 프로젝트 runbook 의 이름 목록대로 `tok set` 으로 다시 넣는다. 인벤토리에는 키 이름이 있으니 이 저장소에 올리지 않는다.
-5. **프로젝트 메모리**: 옛 Mac 의 `~/.claude/projects/<경로>/memory/` 를 옮긴다. 폴더 이름은 프로젝트 절대경로에서 만들어지므로 같은 경로로 clone 한다(사용자 이름이 다르면 폴더 이름을 맞춘다).
+4. **`tok`**: 스크립트·정책 사본은 비공개 저장소 `tokens/` 에 있다. Keychain 값은 옮겨지지 않는다 — 인벤토리의 이름 목록대로 `tok set` 으로 다시 넣는다(키 이름이 있으니 이 공개 저장소에는 올리지 않는다).
+5. **프로젝트**: `~/Dev/<프로젝트>` 에 clone 한다(iCloud 밖, 모든 컴퓨터 같은 경로). 자세한 순서는 `dev-sync.md`.
 6. **확인**: 새 세션에서 이 저장소의 지침(한글·caveman 등)이 적용되는지 본다. `/context` 의 Memory files 에 `~/.claude-config/CLAUDE.md`·`mac.md` 가 보이면 된다.
