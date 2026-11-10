@@ -47,12 +47,23 @@ main() {
   add_profile "eval \"\$($BREW_PREFIX/bin/brew shellenv)\""
 
   step "2. gh · node 22 · pnpm · age"
-  for f in gh node@22 pnpm age; do
-    if brew list --formula "$f" >/dev/null 2>&1; then ok "$f 이미 있음"; else brew install "$f" </dev/null; fi
+  # 이미 nvm 등으로 node·pnpm 을 쓰는 Mac 은 그대로 둔다(Homebrew node 가 PATH 앞을 차지해 버전이 바뀌는 것 방지)
+  [ -s "$HOME/.nvm/nvm.sh" ] && { set +u; . "$HOME/.nvm/nvm.sh" >/dev/null 2>&1; set -u; }
+  NEED_NODE=1; NEED_PNPM=1
+  if command -v node >/dev/null 2>&1 && [ "$(node -p 'process.versions.node.split(".")[0]' 2>/dev/null || echo 0)" -ge 22 ]; then
+    NEED_NODE=0; ok "node $(node -v) 이미 있음($(command -v node)) — Homebrew node 건너뜀"
+  fi
+  command -v pnpm >/dev/null 2>&1 && { NEED_PNPM=0; ok "pnpm $(pnpm -v) 이미 있음 — 건너뜀"; }
+  for f in gh age; do
+    if command -v "$f" >/dev/null 2>&1 || brew list --formula "$f" >/dev/null 2>&1; then ok "$f 이미 있음"; else brew install "$f" </dev/null; fi
   done
-  NODE_BIN="$(brew --prefix node@22)/bin"
-  export PATH="$NODE_BIN:$PATH"
-  add_profile "export PATH=\"$NODE_BIN:\$PATH\""
+  if [ "$NEED_NODE" = 1 ]; then
+    brew list --formula node@22 >/dev/null 2>&1 || brew install node@22 </dev/null
+    NODE_BIN="$(brew --prefix node@22)/bin"
+    export PATH="$NODE_BIN:$PATH"
+    add_profile "export PATH=\"$NODE_BIN:\$PATH\""
+  fi
+  [ "$NEED_PNPM" = 1 ] && { brew list --formula pnpm >/dev/null 2>&1 || brew install pnpm </dev/null; }
   ok "node $(node -v), pnpm $(pnpm -v), gh $(gh --version | head -1 | awk '{print $3}')"
 
   step "3. Vercel CLI"
