@@ -78,5 +78,13 @@ Claude 데스크톱 앱: 새 세션 → "이 컴퓨터" → `~/Dev/<폴더이름
 ### 비공개 저장소 처음 만들기 (계정당 한 번)
 `~/.claude-private`에 `bin/link-memory`, `bin/sync`를 두고 `gh repo create <계정>/claude-private --private --source ~/.claude-private --push`. 그 뒤로는 `dev-bootstrap`이 clone한다.
 
+## 비밀 값(env) — 암호화 보관 (2026-11-10 사용자 결정)
+- 각 프로젝트의 `.env*`·`.dev.vars`·`.vercel/project.json` 은 비공개 저장소 `claude-private/env/<프로젝트>.tar.age` 에 **age 암호문**으로만 보관한다. 도구는 `claude-private/bin/env-vault`.
+- 암호화는 공개키(`env/recipient.txt`)만으로 된다 → Claude 세션이 값을 보지 않고 저장할 수 있다. 복호화 열쇠는 사용자가 정한 암호로 잠근 `env/identity.age`. 각 Mac 의 풀린 열쇠는 `~/.config/env-vault/identity`(600).
+- **새 비밀이 생기면**: 프로젝트의 `.env.local` 등에 넣기만 한다. Claude 응답이 끝날 때 도는 Stop hook(`sync push`)이 바뀐 env 만 골라 자동 암호화·push 한다. 다른 Mac 은 `env-vault restore <프로젝트>`.
+- 새 Mac: `mac-setup` 9단계가 열쇠 암호를 한 번 묻고 모든 프로젝트 env 를 복원한다.
+- 처음 한 번(계정당): `env-vault init` — 열쇠를 만들고 암호를 두 번 입력. 그 암호는 Apple 암호 앱 등에 따로 적어 둔다(잃으면 보관본을 못 연다).
+- 장기 개인 키(`tok`, 키체인)는 이 방식과 별개로 컴퓨터마다 `tok set`.
+
 ## 컴퓨터를 잃어버렸을 때
 `~/.claude-private/LOST_DEVICE.md` (비공개 저장소)를 따른다. 요지: 나의 찾기로 잠금 → GitHub·Vercel·Supabase·Claude 세션과 CLI 토큰 폐기 → 키체인 키 재발급 → 새 컴퓨터는 위 순서.

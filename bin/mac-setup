@@ -5,13 +5,14 @@
 #
 # 하는 일
 #   1. Homebrew 설치(Xcode 명령줄 도구·git 포함) — Mac 비밀번호를 물어본다
-#   2. gh, node 22, pnpm 설치 + PATH(~/.zprofile)
+#   2. gh, node 22, pnpm, age 설치 + PATH(~/.zprofile)
 #   3. Vercel CLI 설치
 #   4. git 사용자 이름·이메일 설정(없을 때만 물어봄)
-#   5. GitHub 로그인(gh, 브라우저) + git 이 gh 로그인을 쓰게 설정
+#   5. GitHub 로그인(gh, 브라우저) + git 이 gh 로그인을 쓰게 설정 + 다른 계정(회사) 추가 로그인 선택
 #   6. Vercel 로그인(브라우저)
 #   7. ~/.claude-config 받기 → dev-bootstrap(비공개 저장소·메모리·hook·전역 지침·PATH)
-#   8. 받을 프로젝트를 물어보고 ~/Dev/<폴더> 로 clone
+#   8. 받을 프로젝트를 물어보고 ~/Dev/<폴더> 로 clone (기본 계정에 권한 없으면 다른 로그인 계정으로)
+#   9. 암호화 보관된 env 복원(열쇠 암호를 한 번 묻는다) + env-vault·tok PATH
 #
 # 환경변수로 물어보는 단계를 건너뛸 수 있다
 #   MAC_SETUP_PROJECTS="bravekevin/zellytalk:ZellyTalk owner/repo:폴더"   (none 이면 건너뜀)
@@ -45,8 +46,8 @@ main() {
   eval "$("$BREW_PREFIX/bin/brew" shellenv)"
   add_profile "eval \"\$($BREW_PREFIX/bin/brew shellenv)\""
 
-  step "2. gh · node 22 · pnpm"
-  for f in gh node@22 pnpm; do
+  step "2. gh · node 22 · pnpm · age"
+  for f in gh node@22 pnpm age; do
     if brew list --formula "$f" >/dev/null 2>&1; then ok "$f 이미 있음"; else brew install "$f" </dev/null; fi
   done
   NODE_BIN="$(brew --prefix node@22)/bin"
@@ -76,6 +77,16 @@ main() {
   fi
   gh auth setup-git
   ok "git 이 gh 로그인을 사용"
+  PRIMARY=$(gh api user -q .login)
+  if have_tty; then
+    extra=$(ask "  다른 GitHub 계정(예: 회사 계정)도 로그인할까요? 계정 이름을 입력(없으면 엔터):")
+    if [ -n "$extra" ] && ! gh auth status 2>/dev/null | grep -q "account $extra "; then
+      echo "  브라우저에서 $extra 로 로그인하세요."
+      gh auth login --hostname github.com --git-protocol https --web <"$TTY" || true
+    fi
+    gh auth switch -u "$PRIMARY" >/dev/null 2>&1 || true
+    ok "기본 계정: $PRIMARY"
+  fi
 
   step "6. Vercel 로그인"
   if vercel whoami >/dev/null 2>&1; then ok "이미 로그인: $(vercel whoami 2>/dev/null | tail -1)"
@@ -101,15 +112,37 @@ main() {
   for item in $P; do
     repo="${item%%:*}"; dir="${item#*:}"; [ "$dir" = "$item" ] && dir="${repo##*/}"
     if [ -d "$HOME/Dev/$dir/.git" ]; then git -C "$HOME/Dev/$dir" pull -q --ff-only && ok "$dir 갱신"
-    else gh repo clone "$repo" "$HOME/Dev/$dir" -- -q </dev/null && ok "$repo → ~/Dev/$dir" || echo "  ! $repo 받기 실패(권한·계정 확인)"; fi
+    elif gh repo clone "$repo" "$HOME/Dev/$dir" -- -q </dev/null 2>/dev/null; then ok "$repo → ~/Dev/$dir"
+    else
+      # 기본 계정에 권한이 없으면 다른 로그인 계정으로 시도하고, 그 저장소만 그 계정을 쓰도록 설정
+      done_=""
+      for acct in $(gh auth status 2>/dev/null | sed -n 's/.*account \([^ ]*\) .*/\1/p'); do
+        [ "$acct" = "$PRIMARY" ] && continue
+        if GH_TOKEN=$(gh auth token -u "$acct") gh repo clone "$repo" "$HOME/Dev/$dir" -- -q -c credential.helper= -c "credential.helper=!f() { test \"\$1\" = get && echo username=$acct && echo \"password=\$(gh auth token -u $acct)\"; }; f" </dev/null 2>/dev/null; then
+          git -C "$HOME/Dev/$dir" config --unset-all credential.helper 2>/dev/null || true
+          git -C "$HOME/Dev/$dir" config --add credential.helper ''
+          git -C "$HOME/Dev/$dir" config --add credential.helper "!f() { test \"\$1\" = get && echo username=$acct && echo \"password=\$(gh auth token -u $acct)\"; }; f"
+          ok "$repo → ~/Dev/$dir ($acct 계정 전용으로 설정)"; done_=1; break
+        fi
+      done
+      [ -n "$done_" ] || echo "  ! $repo 받기 실패(권한 있는 계정으로 로그인했는지 확인)"
+    fi
   done
   python3 "$HOME/.claude-private/bin/link-memory" >/dev/null 2>&1 || true
+
+  step "9. 프로젝트 env(비밀 값) 복원"
+  if [ -f "$HOME/.claude-private/env/identity.age" ]; then
+    if have_tty; then bash "$HOME/.claude-private/bin/env-vault" restore --all || echo "  ! env 복원 실패 — 나중에 'env-vault restore --all'"
+    else echo "  ! 터미널이 없어 건너뜀 — 나중에 'env-vault restore --all'"; fi
+  else echo "  보관된 env 열쇠가 없습니다. 처음 한 번 'env-vault init' (dev-sync.md 참고)"; fi
+  add_profile 'export PATH="$HOME/.claude-private/bin:$HOME/.claude-private/tokens/bin:$PATH"'
+  ok "env-vault·tok 을 PATH 에 추가(새 터미널부터)"
 
   cat <<'EOF'
 
 ✅ 준비 끝. 다음은 직접:
   1. Claude 앱을 껐다 켭니다(새 PATH 적용). 터미널도 새로 엽니다.
-  2. 프로젝트 env: 프로젝트 폴더에서  vercel link  →  vercel env pull .env.local --environment=development
+  2. 프로젝트 env 는 9단계에서 복원됨. 새 비밀이 생기면 .env.local 에 넣기만 하면 Claude 세션이 끝날 때 자동 암호화·보관
   3. 장기 키가 필요하면  tok set <키이름>  (이름 목록: ~/.claude-private/tokens/TOKEN_INVENTORY.md)
   4. Claude 새 세션: "이 컴퓨터" → ~/Dev/<폴더> 선택
   5. 점검: git-safety audit ~/Dev/<폴더>
