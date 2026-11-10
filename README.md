@@ -6,6 +6,7 @@
 curl -fsSL https://raw.githubusercontent.com/bravekevin/claude-config/main/bin/mac-setup | bash
 ```
 Claude 세션에 맡길 때: **"github.com/bravekevin/claude-config 보고 이 Mac 준비 안내해줘"** — Claude가 이 README 를 읽고 순서를 안내한다(비밀번호 입력은 직접).
+컴퓨터를 잃어버려서 다시 시작하는 경우: 세션에 **"집 Mac을 잃어버렸어. github.com/bravekevin/claude-config 보고 새 Mac에서 다시 시작하게 안내해줘"** — 설치 후 비공개 저장소의 `LOST_DEVICE.md` 2장 순서를 따른다.
 자세한 설명은 [`dev-sync.md`](dev-sync.md).
 
 ---
