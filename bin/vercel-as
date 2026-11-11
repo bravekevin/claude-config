@@ -1,0 +1,33 @@
+#!/usr/bin/env bash
+# 프로젝트마다 다른 Vercel 계정으로 vercel 을 실행한다: 위쪽 폴더의 .vercel-account(계정 이름 한 줄)를 찾아 ~/.vercel-accounts/<이름> 설정 폴더를 쓴다
+#
+# 사용:
+#   vercel-as login            # 이 프로젝트 계정으로 처음 한 번 로그인
+#   vercel-as deploy --prod    # 이 프로젝트 계정으로 배포
+#   vercel-as whoami           # 지금 어느 계정인지
+# .vercel-account 가 없으면 기본 vercel(전역 로그인)을 그대로 실행한다.
+set -euo pipefail
+
+dir="$PWD"
+account=""
+while [ "$dir" != "/" ]; do
+  if [ -f "$dir/.vercel-account" ]; then
+    account="$(tr -d '[:space:]' < "$dir/.vercel-account")"
+    break
+  fi
+  dir="$(dirname "$dir")"
+done
+
+if [ -z "$account" ]; then
+  exec vercel "$@"
+fi
+
+case "$account" in
+  *[!A-Za-z0-9._-]*) echo "vercel-as: .vercel-account 이름이 올바르지 않아요: $account" >&2; exit 1 ;;
+esac
+
+config="$HOME/.vercel-accounts/$account"
+mkdir -p "$config"
+chmod 700 "$HOME/.vercel-accounts" "$config"
+echo "vercel-as: 계정 '$account' ($dir/.vercel-account)" >&2
+exec vercel --global-config "$config" "$@"

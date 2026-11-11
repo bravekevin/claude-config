@@ -48,3 +48,12 @@
 - **T1** 개인 장기보관: `login.keychain-db` + `-T ""` ACL (`tok`). ⚠️ `-T ""`는 "생성 프로세스 자동 신뢰 제거" 수준이며 per-read 생체 강제는 아님
 - **T2** 팀/크로스플랫폼: 1Password CLI (`op run`) 우선, 대안 `pass`. per-operation 생체 인증이 필요한 경우도 T2 격상 고려
 - **T3** CI/서버: CI Secret Manager 전용, 로컬 장기보관 금지
+
+## ▲ Vercel CLI는 `vercel-as` 로 (2026-11-11 사용자 결정)
+
+Vercel CLI 전역 로그인은 계정 하나뿐이다. 한 세션이 `vercel login` 하면 다른 프로젝트 배포가 깨진다.
+
+- `vercel` 대신 `vercel-as` 로 실행한다(`vercel-as deploy --prod`, `vercel-as whoami` 등 인자는 그대로).
+- `vercel-as` 는 위쪽 폴더의 `.vercel-account`(계정 이름 한 줄)를 찾아 `~/.vercel-accounts/<이름>` 설정 폴더로 실행한다. 파일이 없으면 기본 `vercel` 그대로.
+- 전역 `vercel login`·`vercel logout` 은 하지 않는다. 새 계정은 그 프로젝트에 `.vercel-account` 를 두고 사용자가 `vercel-as login` 을 한 번(Mac마다) 한다. 로그인은 사용자가 브라우저로 승인한다.
+- `whoami` 결과가 예상 계정이 아니면 배포하지 않고 사용자에게 알린다.
