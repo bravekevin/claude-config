@@ -37,6 +37,12 @@
 - `export TOKEN=...` 식으로 **쉘 히스토리에 남기는 패턴 제안 금지**
 - `TOKEN_POLICY.md` / `TOKEN_INVENTORY.md` 에 **값 기입 금지** (이름/메타데이터만)
 
+### 키 보관본(`tok-vault`, 2026-11-23 사용자 결정)
+- 새 Mac·분실 복구용으로 T1 키 전체를 age 로 암호화한 보관본 하나만 예외로 허용한다(비공개 저장소). 도구·조건은 비공개 저장소 `tokens/TOKEN_POLICY.md` §8-1.
+- **FileVault 가 켜진 Mac 에서만** 저장·복원한다. 평문 파일·명령 인자로 값을 옮기지 않는다.
+- 새 Mac 은 `tok-vault restore` 한 번(env-vault 암호). 키를 바꾼 Mac 은 `tok-vault save` 를 다시 돌린다.
+- 분실 시 키 폐기·재발급 원칙은 그대로다.
+
 ### 메모리 저장 규칙
 메모리 `.md` 파일에 토큰 값 저장 금지. 포인터만 허용:
 ```
