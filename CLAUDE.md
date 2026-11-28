@@ -202,6 +202,7 @@ This is the step LLMs skip most often after "run tests". They guess from error k
 - 큰 출력은 그대로 읽지 않는다. 로그·JSON·목록은 `head`·`jq`·`grep` 으로 필요한 부분만 본다. 같은 파일을 반복해서 통째로 읽지 않는다.
 
 ### 모델
+- 기본은 **Opus(20만 한도)**. `~/.claude/settings.json` 의 `model` 은 `opus` 로 둔다. `opus[1m]`(100만)은 자동 정리 없이 대화가 70만~77만까지 커져 사용량을 크게 늘렸다(2026-11-28 실측). 100만은 그 세션에서만 `/model` 로 고른다.
 - 기본은 **Opus**. 일상 구현·검수·조회는 Opus 나 Sonnet 으로 충분하다.
 - **Fable 은 어려운 설계·까다로운 버그처럼 꼭 필요할 때만** 쓰고, 쓰기 전에 사용자에게 알린다. Fable 은 입력·출력 단가가 Opus 의 2배이고 주간 Fable 한도를 따로 쓴다.
 
