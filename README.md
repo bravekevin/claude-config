@@ -16,7 +16,8 @@ Mac 여러 대와 클라우드 세션이 같은 지침을 쓰기 위한 저장�
 
 | 파일 | 쓰는 곳 |
 |---|---|
-| `CLAUDE.md` | 공통 — 한글·caveman·karpathy·커밋·테스트·프로젝트 지침 우선순위 |
+| `CLAUDE.md` | 공통 — 한글·질문 창·코딩 태도(karpathy 요약)·사용량·GitHub·메일 안내 |
+| `mail.md` · `usage.md` | 메일 작업 때만 읽는 메일 지침 · 사용량 실측 근거(자동으로 싣지 않음) |
 | `mac.md` | Mac 만 — Keychain(`tok`) 토큰 정책 |
 | `cloud.md` | 클라우드만 — 네트워크 시크릿 전제의 비밀값 규칙 |
 | `dev-sync.md` | GitHub 중심 개발 환경 — 분실 대비·여러 컴퓨터 동기화 안내 |
@@ -49,4 +50,4 @@ Mac 여러 대와 클라우드 세션이 같은 지침을 쓰기 위한 저장�
    ```
 4. **`tok`**: 스크립트·정책 사본은 비공개 저장소 `tokens/` 에 있다. Keychain 값은 옮겨지지 않는다 — 인벤토리의 이름 목록대로 `tok set` 으로 다시 넣는다(키 이름이 있으니 이 공개 저장소에는 올리지 않는다).
 5. **프로젝트**: `~/Dev/<프로젝트>` 에 clone 한다(iCloud 밖, 모든 컴퓨터 같은 경로). 자세한 순서는 `dev-sync.md`.
-6. **확인**: 새 세션에서 이 저장소의 지침(한글·caveman 등)이 적용되는지 본다. `/context` 의 Memory files 에 `~/.claude-config/CLAUDE.md`·`mac.md` 가 보이면 된다.
+6. **확인**: 새 세션에서 이 저장소의 지침(한글·질문 창 등)이 적용되는지 본다. `/context` 의 Memory files 에 `~/.claude-config/CLAUDE.md`·`mac.md` 가 보이면 된다.

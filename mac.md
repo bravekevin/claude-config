@@ -2,73 +2,26 @@
 
 ## 🔐 토큰/시크릿 취급 (필수 준수)
 
-**정책:** `~/Desktop/Dev/TOKEN_POLICY.md`
-**인벤토리:** `~/Desktop/Dev/TOKEN_INVENTORY.md`
-**CLI:** `~/Desktop/Dev/bin/tok`
+정책 `~/Desktop/Dev/TOKEN_POLICY.md`(Tier 상세 §2) · 인벤토리 `~/Desktop/Dev/TOKEN_INVENTORY.md` · CLI `~/Desktop/Dev/bin/tok`. 장기보관은 Keychain, 실행 시 주입은 1Password/pass. **env 는 저장소가 아니라 일회성 전달 수단**이다.
 
-### 한 줄 원칙
-장기보관 = Keychain(사용자 확인 필수). 실행 시 주입 = 1Password/pass. **env 는 저장소가 아니라 일회성 전달 수단**.
-
-### 조회 기본은 `run`
-- ✅ `tok run <key> <ENV_NAME> -- <command>` — 하위 프로세스에만 주입
-- ✅ `tok env <ENV_NAME> <key> -- <command>` — 동의어
-- ⚠️ `tok read <key> --reason "<text>"` — stdout 평문 노출. `--reason` 필수이며, 이유는 사용자에게 **먼저 확인**한 뒤 전달
-
-### Tier 판정 먼저 (토큰 받을 때)
-세션에서 토큰을 받으면 **저장 전에 Tier 부터 판정**:
-- **T1 (개인 장기보관, 로컬 단일 사용자, 고권한 PAT 등)** → `tok set` 제안
-- **T2 (팀/크로스플랫폼 공유)** → `op` / `pass` 사용 안내, **`tok set` 금지**
-- **T3 (CI/서버 전용)** → CI Secret Manager 에서만 관리하도록 안내, **로컬 저장 금지**
-판정이 애매하면 사용자에게 확인.
-
-### 반드시 할 것
-- 토큰 필요 작업은 **`tok run` 형태로 제안**
-- 신규 토큰 발급 요청 시 **단수명/OIDC/더 낮은 스코프 대안 먼저 제시**
-- 만료 없는 사용자 OAuth access token 발급은 **거부**하고 refresh flow 권고
-- T1 으로 판정된 토큰만 `tok set` 제안. 저장 후 `TOKEN_INVENTORY.md` 엔트리 추가(메타데이터만) 제안
-- 평문은 응답 본문/메모리에서 즉시 제거
-- 토큰 사용/조회 시 **사용자에게 명시적으로 고지**
-
-### 절대 하지 말 것
-- `cat ~/.env.secrets`, `cat **/.env.local`, `cat ~/.ssh/*` 등 **시크릿 파일 무단 조회 금지**
-- 토큰 값을 **응답 본문·memory/\*.md·코드 주석·커밋 메시지·PR 본문에 평문 기재 금지**
-- `tok read` 결과를 **파일로 리다이렉트 / 다른 변수에 장기 저장 금지**
-- 토큰 인자를 포함한 명령을 `.claude/settings.json` **allow 리스트에 추가 금지**
-- `export TOKEN=...` 식으로 **쉘 히스토리에 남기는 패턴 제안 금지**
-- `TOKEN_POLICY.md` / `TOKEN_INVENTORY.md` 에 **값 기입 금지** (이름/메타데이터만)
-
-### 키 보관본(`tok-vault`, 2026-11-23 사용자 결정)
-- 새 Mac·분실 복구용으로 T1 키 전체를 age 로 암호화한 보관본 하나만 예외로 허용한다(비공개 저장소). 도구·조건은 비공개 저장소 `tokens/TOKEN_POLICY.md` §8-1.
-- **FileVault 가 켜진 Mac 에서만** 저장·복원한다. 평문 파일·명령 인자로 값을 옮기지 않는다.
-- 새 Mac 은 `tok-vault restore` 한 번(env-vault 암호). 키를 바꾼 Mac 은 `tok-vault save` 를 다시 돌린다.
-- 분실 시 키 폐기·재발급 원칙은 그대로다.
-
-### 메모리 저장 규칙
-메모리 `.md` 파일에 토큰 값 저장 금지. 포인터만 허용:
-```
-✓ OK:  "Notion API 토큰은 `tok run gentlefarmers.notion.api_token NOTION_TOKEN -- ...` 로 사용"
-✗ 금지: "Notion Token: ntn_abc123..."
-```
-
-### Tier 참조 (상세는 TOKEN_POLICY.md §2)
-- **T1** 개인 장기보관: `login.keychain-db` + `-T ""` ACL (`tok`). ⚠️ `-T ""`는 "생성 프로세스 자동 신뢰 제거" 수준이며 per-read 생체 강제는 아님
-- **T2** 팀/크로스플랫폼: 1Password CLI (`op run`) 우선, 대안 `pass`. per-operation 생체 인증이 필요한 경우도 T2 격상 고려
-- **T3** CI/서버: CI Secret Manager 전용, 로컬 장기보관 금지
+- **조회는 `tok run <key> <ENV_NAME> -- <command>`**(동의어 `tok env`) — 하위 프로세스에만 주입한다. `tok read <key> --reason "<이유>"` 는 평문이 나오므로 이유를 사용자에게 먼저 확인하고, 결과를 파일·변수에 남기지 않는다. 토큰을 쓰거나 조회할 때는 사용자에게 알린다.
+- **토큰을 받으면 저장 전에 Tier 판정**(애매하면 묻는다). T1 개인 장기보관 → `tok set` 제안 후 인벤토리에 메타데이터만 추가 제안. T2 팀·크로스플랫폼 → `op`/`pass`, `tok set` 금지. T3 CI/서버 → CI Secret Manager 만, 로컬 저장 금지.
+- **새 토큰 발급**은 단수명·OIDC·낮은 스코프 대안을 먼저 제시한다. 만료 없는 사용자 OAuth access token 은 거부하고 refresh flow 를 권한다.
+- **금지**: 시크릿 파일 무단 조회(`~/.env.secrets`, `**/.env.local`, `~/.ssh/*`), 토큰 값을 답변·메모리·코드 주석·커밋·PR 에 평문으로 적기(메모리에는 `tok run <key> ...` 같은 포인터만), 토큰 인자가 든 명령을 `settings.json` allow 에 추가, `export TOKEN=...` 처럼 히스토리에 남는 패턴, 정책·인벤토리 파일에 값 기입. 평문이 보이면 즉시 지운다.
+- **키 보관본 `tok-vault`**(2026-11-23): T1 키 전체를 age 로 암호화한 보관본 하나만 예외로 허용(비공개 저장소 `tokens/TOKEN_POLICY.md` §8-1). FileVault 가 켜진 Mac 에서만 `tok-vault save`/`restore`, 평문 파일·명령 인자로 값을 옮기지 않는다. 분실 시 폐기·재발급 원칙은 그대로.
 
 ## ▲ Vercel CLI는 `vercel-as` 로 (2026-11-11 사용자 결정)
 
-Vercel CLI 전역 로그인은 계정 하나뿐이다. 한 세션이 `vercel login` 하면 다른 프로젝트 배포가 깨진다.
+전역 로그인은 계정 하나뿐이라 한 세션의 `vercel login` 이 다른 프로젝트 배포를 깬다.
 
-- `vercel` 대신 `vercel-as` 로 실행한다(`vercel-as deploy --prod`, `vercel-as whoami` 등 인자는 그대로).
-- `vercel-as` 는 위쪽 폴더의 `.vercel-account`(계정 이름 한 줄)를 찾아 `~/.vercel-accounts/<이름>` 설정 폴더로 실행한다. 파일이 없으면 기본 `vercel` 그대로.
-- 전역 `vercel login`·`vercel logout` 은 하지 않는다. 새 계정은 그 프로젝트에 `.vercel-account` 를 두고 사용자가 `vercel-as login` 을 한 번(Mac마다) 한다. 로그인은 사용자가 브라우저로 승인한다.
-- `whoami` 결과가 예상 계정이 아니면 배포하지 않고 사용자에게 알린다.
+- `vercel` 대신 `vercel-as` 로 실행한다(인자는 그대로). 위쪽 폴더의 `.vercel-account`(계정 이름)로 `~/.vercel-accounts/<이름>` 설정을 쓴다. 파일이 없으면 기본 `vercel`.
+- 전역 `vercel login`·`logout` 금지. 새 계정은 프로젝트에 `.vercel-account` 를 두고 사용자가 Mac 마다 `vercel-as login` 을 한 번 한다.
+- `whoami` 가 예상 계정이 아니면 배포하지 않고 알린다.
 
 ## 🖥️ 화면 제어(computer-use) 승인은 모바일에서 받는다 (2026-11-11 사용자 결정)
 
-사용자는 모바일로 세션을 따라오는 일이 많다. Mac 시스템 승인창(`request_access`, `request_full_control`)은 모바일에 표시되지 않지만, `AskUserQuestion` 질문 창은 모바일에 뜬다.
+Mac 시스템 승인창(`request_access`, `request_full_control`)은 모바일에 안 뜨고 `AskUserQuestion` 은 뜬다.
 
-- 앱 제어 권한이나 전체 화면 제어가 필요하면 먼저 `AskUserQuestion` 으로 묻는다. 무엇을 왜 하는지(앱, 할 일, 보낼 내용)를 질문에 적는다.
-- 사용자가 질문 창에서 승인하면 그다음에 Mac 승인창을 띄운다. Mac 승인창은 Mac에서 눌러야 한다고 함께 알린다.
-- 메시지·파일 전송처럼 되돌리기 어려운 동작도 보내기 전에 같은 방식으로 질문 창에서 확인을 받는다(사용자가 내용까지 이미 지시한 경우는 제외).
-- 전체 화면 제어는 백그라운드(`app_*`)로 안 될 때만 쓴다. 창이 다른 Space에 있거나 전체 화면 앱이 앞에 있으면 백그라운드 클릭이 막힌다.
+- 앱 제어·전체 화면 제어가 필요하면 먼저 질문 창으로 무엇을 왜 하는지(앱·할 일·보낼 내용) 묻고, 승인 뒤 Mac 승인창을 띄우며 Mac 에서 눌러야 한다고 알린다.
+- 메시지·파일 전송처럼 되돌리기 어려운 동작도 같은 방식으로 확인한다(사용자가 내용까지 지시한 경우는 제외).
+- 전체 화면 제어는 백그라운드(`app_*`)로 안 될 때만 쓴다(다른 Space·전체 화면 앱이 앞에 있으면 막힌다).
